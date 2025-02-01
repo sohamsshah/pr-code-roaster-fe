@@ -1,0 +1,68 @@
+name: Check Console Logs
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  check-logs:
+    if: github.event.label.name == 'log checker'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Find and comment on console.logs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            
+            // Get the list of changed files in the PR
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            
+            // Filter for relevant file types (js, jsx, ts, tsx)
+            const relevantFiles = files.filter(file => 
+              /\.(js|jsx|ts|tsx)$/.test(file.filename)
+            );
+            
+            for (const file of relevantFiles) {
+              try {
+                // Use git grep to find console.log statements with line numbers
+                const grepCommand = `git grep -n "console.log" ${file.filename}`;
+                const grepOutput = execSync(grepCommand, { encoding: 'utf-8' });
+                
+                if (grepOutput) {
+                  const lines = grepOutput.split('\n').filter(Boolean);
+                  
+                  for (const line of lines) {
+                    const [lineNumber, ...contentParts] = line.split(':');
+                    const content = contentParts.join(':').trim();
+                    
+                    // Create a review comment
+                    await github.rest.pulls.createReviewComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      pull_number: context.issue.number,
+                      commit_id: file.sha,
+                      path: file.filename,
+                      line: parseInt(lineNumber),
+                      body: `⚠️ Found console.log statement:\n\`\`\`javascript\n${content}\n\`\`\`\nConsider removing or replacing with proper logging mechanism.`
+                    });
+                  }
+                }
+              } catch (error) {
+                if (!error.message.includes('no matches found')) {
+                  console.error(`Error processing ${file.filename}:`, error);
+                }
+              }
+            }

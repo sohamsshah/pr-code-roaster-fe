@@ -44,33 +44,35 @@ jobs:
             
             for (const file of relevantFiles) {
               try {
-                // Use git grep to find console.log statements with line numbers
-                const grepCommand = `git grep -n "console.log" ${file.filename}`;
-                const grepOutput = execSync(grepCommand, { encoding: 'utf-8' });
+                // Get the file content at the PR head
+                const fileContent = execSync(`git show ${pr.head.sha}:${file.filename}`, { encoding: 'utf-8' });
+                const fileLines = fileContent.split('\n');
                 
-                if (grepOutput) {
-                  const lines = grepOutput.split('\n').filter(Boolean);
-                  
-                  for (const line of lines) {
-                    const [lineNumber, ...contentParts] = line.split(':');
-                    const content = contentParts.join(':').trim();
-                    
-                    // Create a review comment using the correct parameters
-                    await github.rest.pulls.createReviewComment({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      pull_number: context.issue.number,
-                      body: `⚠️ Found console.log statement:\n\`\`\`javascript\n${content}\n\`\`\`\nConsider removing or replacing with proper logging mechanism.`,
-                      commit_id: pr.head.sha,
-                      path: file.filename,
-                      position: parseInt(lineNumber),
-                      side: 'RIGHT'
+                // Find all lines containing console.log
+                const consoleLogLines = fileLines.reduce((acc, line, index) => {
+                  if (line.includes('console.log')) {
+                    acc.push({
+                      lineNumber: index + 1,  // Convert to 1-based line number
+                      content: line.trim()
                     });
                   }
+                  return acc;
+                }, []);
+                
+                // Create review comments for each found instance
+                for (const { lineNumber, content } of consoleLogLines) {
+                  await github.rest.pulls.createReviewComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.issue.number,
+                    body: `⚠️ Found console.log statement:\n\`\`\`javascript\n${content}\n\`\`\`\nConsider removing or replacing with proper logging mechanism.`,
+                    commit_id: pr.head.sha,
+                    path: file.filename,
+                    line: lineNumber,
+                    side: 'RIGHT'
+                  });
                 }
               } catch (error) {
-                if (!error.message.includes('no matches found')) {
-                  console.error(`Error processing ${file.filename}:`, error);
-                }
+                console.error(`Error processing ${file.filename}:`, error);
               }
             }

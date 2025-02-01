@@ -22,6 +22,7 @@ function App() {
         },
         body: JSON.stringify({ prUrl: prLink }),
       })
+      console.log('response')
       const data = await response.json()
       setResult(data.roastDocument)
     } catch (error) {

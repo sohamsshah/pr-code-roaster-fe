@@ -7,6 +7,8 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState('')
 
+  console.log('hello world')
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!prLink) return

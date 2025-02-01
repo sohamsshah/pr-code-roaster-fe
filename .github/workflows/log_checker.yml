@@ -23,6 +23,13 @@ jobs:
           script: |
             const { execSync } = require('child_process');
             
+            // Get the base and head SHAs
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            
             // Get the list of changed files in the PR
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
@@ -48,15 +55,16 @@ jobs:
                     const [lineNumber, ...contentParts] = line.split(':');
                     const content = contentParts.join(':').trim();
                     
-                    // Create a review comment
+                    // Create a review comment using the correct parameters
                     await github.rest.pulls.createReviewComment({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       pull_number: context.issue.number,
-                      commit_id: file.sha,
+                      body: `⚠️ Found console.log statement:\n\`\`\`javascript\n${content}\n\`\`\`\nConsider removing or replacing with proper logging mechanism.`,
+                      commit_id: pr.head.sha,
                       path: file.filename,
-                      line: parseInt(lineNumber),
-                      body: `⚠️ Found console.log statement:\n\`\`\`javascript\n${content}\n\`\`\`\nConsider removing or replacing with proper logging mechanism.`
+                      position: parseInt(lineNumber),
+                      side: 'RIGHT'
                     });
                   }
                 }
